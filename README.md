@@ -446,20 +446,6 @@ updated_at: "2026-01-29T06:26:05.155022Z"
 
 ```bash
 barsukov@barsukov:~/devops-diplom-yandexcloud-1/1_TASK/config/terraform$ terraform destroy
-var.cloud_id
-  https://cloud.yandex.ru/docs/resource-manager/operations/cloud/get-id
-
-  Enter a value: b1gi0o9ad7g6hm1qke89
-
-var.folder_id
-  https://cloud.yandex.ru/docs/resource-manager/operations/folder/get-id
-
-  Enter a value: b1g6id4gd3l1ivm8l812
-
-var.token
-  OAuth-token; https://cloud.yandex.ru/docs/iam/concepts/authorization/oauth-token
-
-  Enter a value: y0__xDo8-1bGMHdEyCVno70E17kTXLZmNs8LY6N-l94Jjt_nP5v
 
 yandex_vpc_network.vpc0: Refreshing state... [id=enp1r8ukdlbsp80490jt]
 yandex_iam_service_account.service: Refreshing state... [id=ajegjb3i5mp00khb6kl5]
