@@ -1,4 +1,4 @@
-# Дипломный практикум в Yandex.Cloud
+# Дипломный практикум в Yandex.Cloud выполнил Барсуков Алексей
   * [Цели:](#цели)
   * [Этапы выполнения:](#этапы-выполнения)
      * [Создание облачной инфраструктуры](#создание-облачной-инфраструктуры)
@@ -1349,6 +1349,10 @@ debian@master-1:~$
 ---
 ### Создание тестового приложения
 
+<details>
+	<summary></summary>
+      <br>
+
 Для перехода к следующему этапу необходимо подготовить тестовое приложение, эмулирующее основное приложение разрабатываемое вашей компанией.
 
 Способ подготовки:
@@ -1363,8 +1367,134 @@ debian@master-1:~$
 
 1. Git репозиторий с тестовым приложением и Dockerfile.
 2. Регистри с собранным docker image. В качестве регистри может быть DockerHub или [Yandex Container Registry](https://cloud.yandex.ru/services/container-registry), созданный также с помощью terraform.
+</details>
 
 ---
+
+## Решение:
+
+---
+Подготовим тестовое приложение.
+
+Созададим отдельный git репозиторий `Test-application-1` с простым nginx конфигом, который будет отдавать статические данные:
+
+Клонируем репозиторий:
+```bash
+git clone https://github.com/Barsukov-Alex/Test-application-1.git
+```
+
+Создадим в этом репозитории файл содержащую HTML-код ниже:  
+index.html
+```html
+<html>
+<head>
+Hey, Netology
+</head>
+<body>
+<h1>Я студент «Нетологии», осваиваю профессию DevOps‑инженера</h1>
+</body>
+</html>
+```
+
+Создадим Dockerfile, который будет запускать веб-сервер Nginx в фоне с индекс страницей:  
+Dockerfile
+```Dockerfile
+FROM nginx:1.27-alpine
+
+COPY index.html /usr/share/nginx/html
+```
+
+Загрузим файлы в [Git-репозиторий](https://github.com/Barsukov-Alex/Test-application-1.git).
+
+
+Выполним сборку приложения:
+
+<details>
+	<summary></summary>
+      <br>
+
+```bash
+barsukov@barsukov:~/Test-application-1$ sudo docker build -t mozdoksity/nginx:v1 .
+DEPRECATED: The legacy builder is deprecated and will be removed in a future release.
+            Install the buildx component to build images with BuildKit:
+            https://docs.docker.com/go/buildx/
+
+Sending build context to Docker daemon  75.26kB
+Step 1/2 : FROM nginx:1.27-alpine
+1.27-alpine: Pulling from library/nginx
+f18232174bc9: Pull complete 
+61ca4f733c80: Pull complete 
+b464cfdf2a63: Pull complete 
+d7e507024086: Pull complete 
+81bd8ed7ec67: Pull complete 
+197eb75867ef: Pull complete 
+34a64644b756: Pull complete 
+39c2ddfd6010: Pull complete 
+Digest: sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
+Status: Downloaded newer image for nginx:1.27-alpine
+ ---> 6769dc3a703c
+Step 2/2 : COPY index.html /usr/share/nginx/html
+ ---> c9c0a150cc97
+Successfully built c9c0a150cc97
+Successfully tagged mozdoksity/nginx:v1
+barsukov@barsukov:~/Test-application-1$
+``` 
+</details>
+
+Проверим, что образ создался:
+
+```bash
+barsukov@barsukov:~/Test-application-1$ sudo docker images
+REPOSITORY         TAG           IMAGE ID       CREATED              SIZE
+mozdoksity/nginx   v1            c9c0a150cc97   About a minute ago   48.2MB
+nginx              1.27-alpine   6769dc3a703c   9 months ago         48.2MB
+barsukov@barsukov:~/Test-application-1$ 
+```
+
+Запустим docker-контейнер с созданным образом и проверим его  работоспособность:
+
+```bash
+barsukov@barsukov:~/Test-application-1$ sudo docker run -d -p 80:80 mozdoksity/nginx:v1
+c31e3749a62f534127e77f1b41ee55105fc73555ea9003944e614a6789fe3efb
+barsukov@barsukov:~/Test-application-1$ sudo docker ps
+CONTAINER ID   IMAGE                 COMMAND                  CREATED          STATUS          PORTS                               NAMES
+c31e3749a62f   mozdoksity/nginx:v1   "/docker-entrypoint.…"   12 seconds ago   Up 11 seconds   0.0.0.0:80->80/tcp, :::80->80/tcp   quirky_pike
+barsukov@barsukov:~/Test-application-1$ curl http://127.0.0.1
+<html>
+<head>
+Hey, Netology
+</head>
+<body>
+<h1>Я студент «Нетологии», осваиваю профессию DevOps инженера</h1>
+</body>
+</html>
+barsukov@barsukov:~/Test-application-1$ 
+```
+
+Загрузим созданный образ в реестре [Docker Hub](https://hub.docker.com/repository/docker/mozdoksity/nginx/general):
+
+
+```bash
+barsukov@barsukov:~/Test-application-1$ sudo docker push mozdoksity/nginx:v1
+The push refers to repository [docker.io/mozdoksity/nginx]
+bfcb6188f85c: Pushed 
+0d853d50b128: Mounted from library/nginx 
+947e805a4ac7: Mounted from library/nginx 
+811a4dbbf4a5: Mounted from library/nginx 
+b8d7d1d22634: Mounted from library/nginx 
+e244aa659f61: Mounted from library/nginx 
+c56f134d3805: Mounted from library/nginx 
+d71eae0084c1: Mounted from library/nginx 
+08000c18d16d: Mounted from library/nginx 
+v1: digest: sha256:b2431c5fa044cbb7b01bbeccf377656871af2dd30633e39eef273e62a28611ca size: 2196
+barsukov@barsukov:~/Test-application-1$ 
+```
+
+
+
+---
+
+
 ### Подготовка cистемы мониторинга и деплой приложения
 
 Уже должны быть готовы конфигурации для автоматического создания облачной инфраструктуры и поднятия Kubernetes кластера.  
