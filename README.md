@@ -629,7 +629,7 @@ Destroy complete! Resources: 9 destroyed.
 barsukov@barsukov:~/devops-diplom-yandexcloud-1/1_TASK/config/terraform$
 
 ```
-
+<details>
 
 ---
 ### Создание Kubernetes кластера
