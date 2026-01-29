@@ -1275,7 +1275,7 @@ master-1                   : ok=13   changed=10   unreachable=0    failed=0    s
 
 barsukov@barsukov:~/devops-diplom-yandexcloud-1/2-TASK/config/ansible$ 
 ```  
-<details>
+</details>
 
 Перейдём на мастер‑узел и инициируем выполнение Ansible‑playbook Kubespray, чтобы установить кластер Kubernetes, используя указанную команду.
 
