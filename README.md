@@ -1109,6 +1109,7 @@ worker-node = [
 ]
 barsukov@barsukov:~/devops-diplom-yandexcloud-1/2-TASK/config/terraform$ 
 ```
+</details>
 
 
 Выполним проверку созданных ресурсов посредством командной строки (CLI).
