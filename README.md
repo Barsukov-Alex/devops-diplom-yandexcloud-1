@@ -1494,6 +1494,10 @@ barsukov@barsukov:~/Test-application-1$
 
 ### Подготовка cистемы мониторинга и деплой приложения
 
+<details>
+	<summary></summary>
+      <br>
+
 Уже должны быть готовы конфигурации для автоматического создания облачной инфраструктуры и поднятия Kubernetes кластера.  
 Теперь необходимо подготовить конфигурационные файлы для настройки нашего Kubernetes кластера.
 
@@ -1514,6 +1518,259 @@ barsukov@barsukov:~/Test-application-1$
 3. Дашборды в grafana отображающие состояние Kubernetes кластера.
 4. Http доступ на 80 порту к тестовому приложению.
 5. Atlantis или terraform cloud или ci/cd-terraform
+</details>
+
+---
+### Решение
+
+### 4.1 Деплой в кластер prometheus, grafana, alertmanager, экспортер основных метрик Kubernetes.
+
+Для решения задачи деплоя в кластер prometheus, grafana, alertmanager, экспортер основных метрик Kubernetes воспользуемся решением [kube-prometheus](https://github.com/prometheus-operator/kube-prometheus.git).
+
+Склонируем репозиторий
+```bash
+git clone https://github.com/prometheus-operator/kube-prometheus.git
+```
+
+Переходим в папку с kube-prometheus
+```bash
+cd kube-prometheus/
+```
+
+Потребовалось дополнить конфигурацию grafana-deployment.yaml, добавив строки в readinessProbe чтобы не возникало ошибок:
+
+
+```bash
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 60  # Увеличить при необходимости
+          periodSeconds: 20
+          timeoutSeconds: 10
+          failureThreshold: 6
+```
+
+
+
+Создадим мониторинг стека с использование конфигурации в manifests каталоге:
+```bash
+kubectl apply --server-side -f manifests/setup
+kubectl wait \
+ --for condition=Established \
+ --all CustomResourceDefinition \
+ --namespace=monitoring
+kubectl apply -f manifests/
+```
+
+Установил основные компоненты стека мониторинга, дождался развертывания всех подов:
+
+```bash
+kubectl apply -f manifests/
+kubectl get pods -n monitoring --watch
+```
+
+```bash
+debian@master-1:~/kube-prometheus$ kubectl get all -n monitoring
+NAME                                       READY   STATUS    RESTARTS   AGE
+pod/alertmanager-main-0                    2/2     Running   0          74s
+pod/alertmanager-main-1                    2/2     Running   0          74s
+pod/alertmanager-main-2                    2/2     Running   0          74s
+pod/blackbox-exporter-79dcb9cb75-nsjz2     3/3     Running   0          87s
+pod/grafana-85bc988886-xctv8               1/1     Running   0          84s
+pod/kube-state-metrics-546bdcd66-jxhj9     3/3     Running   0          83s
+pod/node-exporter-6dbtr                    2/2     Running   0          83s
+pod/node-exporter-c79bt                    2/2     Running   0          83s
+pod/node-exporter-xzzr8                    2/2     Running   0          83s
+pod/prometheus-adapter-6c5fcc994f-ptdsw    1/1     Running   0          80s
+pod/prometheus-adapter-6c5fcc994f-pwc6s    1/1     Running   0          80s
+pod/prometheus-k8s-0                       2/2     Running   0          73s
+pod/prometheus-k8s-1                       2/2     Running   0          73s
+pod/prometheus-operator-58f6c8c8d9-tnpm9   2/2     Running   0          80s
+
+NAME                            TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)                      AGE
+service/alertmanager-main       ClusterIP   10.233.57.67    <none>        9093/TCP,8080/TCP            87s
+service/alertmanager-operated   ClusterIP   None            <none>        9093/TCP,9094/TCP,9094/UDP   74s
+service/blackbox-exporter       ClusterIP   10.233.54.134   <none>        9115/TCP,19115/TCP           87s
+service/grafana                 ClusterIP   10.233.61.36    <none>        3000/TCP                     84s
+service/kube-state-metrics      ClusterIP   None            <none>        8443/TCP,9443/TCP            84s
+service/node-exporter           ClusterIP   None            <none>        9100/TCP                     83s
+service/prometheus-adapter      ClusterIP   10.233.54.135   <none>        443/TCP                      81s
+service/prometheus-k8s          ClusterIP   10.233.6.194    <none>        9090/TCP,8080/TCP            82s
+service/prometheus-operated     ClusterIP   None            <none>        9090/TCP                     73s
+service/prometheus-operator     ClusterIP   None            <none>        8443/TCP                     80s
+
+NAME                           DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR            AGE
+daemonset.apps/node-exporter   3         3         3       3            3           kubernetes.io/os=linux   83s
+
+NAME                                  READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/blackbox-exporter     1/1     1            1           87s
+deployment.apps/grafana               1/1     1            1           85s
+deployment.apps/kube-state-metrics    1/1     1            1           84s
+deployment.apps/prometheus-adapter    2/2     2            2           81s
+deployment.apps/prometheus-operator   1/1     1            1           80s
+
+NAME                                             DESIRED   CURRENT   READY   AGE
+replicaset.apps/blackbox-exporter-79dcb9cb75     1         1         1       87s
+replicaset.apps/grafana-85bc988886               1         1         1       84s
+replicaset.apps/kube-state-metrics-546bdcd66     1         1         1       84s
+replicaset.apps/prometheus-adapter-6c5fcc994f    2         2         2       81s
+replicaset.apps/prometheus-operator-58f6c8c8d9   1         1         1       80s
+
+NAME                                 READY   AGE
+statefulset.apps/alertmanager-main   3/3     74s
+statefulset.apps/prometheus-k8s      2/2     73s
+```
+
+Чтобы подключиться снаружи к Grafana необходимо изменить порт с ClusterIP на NodePort
+
+```bash
+debian@master-1:~/kube-prometheus$ cat <<EOF > ~/patch.yml
+spec:
+  type: NodePort
+EOF
+debian@master-1:~/kube-prometheus$ kubectl patch svc grafana -n monitoring --patch-file ~/patch.yml
+service/grafana patched
+service/grafana patched
+```
+
+Проверим работу:
+
+```bash
+kubectl get svc -n monitoring
+NAME                    TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)                      AGE
+alertmanager-main       ClusterIP   10.233.57.67    <none>        9093/TCP,8080/TCP            7m
+alertmanager-operated   ClusterIP   None            <none>        9093/TCP,9094/TCP,9094/UDP   6m47s
+blackbox-exporter       ClusterIP   10.233.54.134   <none>        9115/TCP,19115/TCP           7m
+grafana                 NodePort    10.233.61.36    <none>        3000:32103/TCP               6m57s
+kube-state-metrics      ClusterIP   None            <none>        8443/TCP,9443/TCP            6m57s
+node-exporter           ClusterIP   None            <none>        9100/TCP                     6m56s
+prometheus-adapter      ClusterIP   10.233.54.135   <none>        443/TCP                      6m54s
+prometheus-k8s          ClusterIP   10.233.6.194    <none>        9090/TCP,8080/TCP            6m55s
+prometheus-operated     ClusterIP   None            <none>        9090/TCP                     6m46s
+prometheus-operator     ClusterIP   None            <none>        8443/TCP                     6m53s
+```
+
+Проверим работу временным пробросом
+
+```bash
+ kubectl port-forward -n monitoring pods/grafana-85bc988886-xctv8 --address 0.0.0.0 3000:3000
+```
+
+Ссылка на проброс к графана http://158.160.123.207:3000
+
+логин admin
+пароль netology
+
+---
+
+### Деплой инфраструктуры в terraform pipeline
+
+Склонируем репозиторий
+```bash
+git clone https://github.com/Barsukov-Alex/Test-application-1.git
+```
+
+Добавим файлы 
+
+Создадим namespace application для приложения
+
+application-ns.yml
+```yml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: application
+```
+
+Создадим DeamonSet, чтобы развернуть приложение на все worker-node:
+
+Nginx-DaemonSet.yml
+```yml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: nginx-deamonset
+  namespace: application
+spec:
+  selector:
+    matchLabels:
+      app: daemonset
+  template:
+    metadata:
+      labels:
+        app: daemonset
+    spec:
+      containers:
+      - name: nginx
+        image: barsukovnv/nginx:v1
+```
+
+Создадим Service для приложения с возможностью доступа снаружи кластера к nginx, используя тип порта NodePort.
+
+Nginx-Service.yml
+```yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-service
+  namespace: application
+spec:
+  ports:
+    - name: nginx
+      port: 80
+      protocol: TCP
+      targetPort: 80
+      nodePort: 30000
+  selector:
+    app: daemonset
+  type: NodePort
+```
+
+Для развертывания приложения воспользуемся инструментом Kustomize
+
+kustomization.yml
+```yml
+namespace: application
+resources:
+- application-ns.yml
+- Nginx-DaemonSet.yml
+- Nginx-Service.yml
+```
+
+Запускаем
+
+```bash
+debian@master-1:~/Test-application-1$ kubectl apply -k .
+namespace/application created
+service/nginx-service created
+daemonset.apps/nginx-deamonset created
+debian@master-1:~/Test-application-1$ 
+```
+
+Проверяем работоспособность 
+
+```bash
+debian@master-1:~/Test-application-1$ kubectl get all -n application
+NAME                        READY   STATUS    RESTARTS   AGE
+pod/nginx-deamonset-4ncsk   1/1     Running   0          61s
+pod/nginx-deamonset-zdldx   1/1     Running   0          61s
+
+NAME                    TYPE       CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+service/nginx-service   NodePort   10.233.4.199   <none>        80:30000/TCP   61s
+
+NAME                             DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE
+daemonset.apps/nginx-deamonset   2         2         2       2            2           <none>          61s
+debian@master-1:~/Test-application-1$ 
+```
+
+
+Проверим Http доступ к тестовому приложению:
+
+http://158.160.123.207:30000
+
+
+
 ---
 ### Установка и настройка CI/CD
 
