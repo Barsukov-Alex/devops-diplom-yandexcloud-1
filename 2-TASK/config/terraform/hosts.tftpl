@@ -1,0 +1,28 @@
+all:
+  hosts:%{ for idx, master-node in masters }
+    master-${idx + 1}:
+      ansible_host: ${master-node.network_interface[0].nat_ip_address}
+      ip: ${master-node.network_interface[0].ip_address}
+      access_ip: ${master-node.network_interface[0].ip_address}%{ endfor }%{ for idx, worker-node in workers }
+      ansible_user: debian
+    worker-${idx + 1}:
+      ansible_host: ${worker-node.network_interface[0].nat_ip_address}
+      ip: ${worker-node.network_interface[0].ip_address}
+      access_ip: ${worker-node.network_interface[0].ip_address}%{ endfor }
+      ansible_user: debian
+  children:
+    kube_control_plane:
+      hosts:%{ for idx, master-node in masters }
+        ${master-node.name}:%{ endfor }
+    kube_node:
+      hosts:%{ for idx, worker-node in workers }
+        ${worker-node.name}:%{ endfor }
+    etcd:
+      hosts:%{ for idx, master-node in masters }
+        ${master-node.name}:%{ endfor }
+    k8s_cluster:
+      children:
+        kube_control_plane:
+        kube_node:
+    calico_rr:
+      hosts: {}
