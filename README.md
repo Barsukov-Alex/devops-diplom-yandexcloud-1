@@ -59,6 +59,588 @@
 
 ## Решение:
 
+Подготовим облачную инфраструктуру в Яндекс.Облако при помощи Terraform.
+
+### 1.1. Создадим сервисный аккаунт, который будет в дальнейшем использоваться Terraform для работы с инфраструктурой с необходимыми и достаточными правами.
+
+```hcl
+# Создание сервисного аккаунта для Terraform
+resource "yandex_iam_service_account" "service" {
+  name      = var.account_name
+  description = "service account to manage VMs"
+  folder_id = var.folder_id
+}
+
+# Назначение роли editor сервисному аккаунту
+resource "yandex_resourcemanager_folder_iam_member" "editor" {
+  folder_id = var.folder_id
+  role      = "editor"
+  member    = "serviceAccount:${yandex_iam_service_account.service.id}"
+  depends_on = [yandex_iam_service_account.service]
+}
+
+# Создание статического ключа доступа для сервисного аккаунта
+resource "yandex_iam_service_account_static_access_key" "terraform_service_account_key" {
+  service_account_id = yandex_iam_service_account.service.id
+  description        = "static access key for object storage"
+}
+```
+
+---
+### 1.2. Подготовим backend для Terraform:  
+
+```hcl
+# Создадим бакет с использованием ключа
+resource "yandex_storage_bucket" "state_storage" {
+  bucket     = local.bucket_name
+  access_key = yandex_iam_service_account_static_access_key.terraform_service_account_key.access_key
+  secret_key = yandex_iam_service_account_static_access_key.terraform_service_account_key.secret_key
+
+  anonymous_access_flags {
+    read = false
+    list = false
+  }
+}
+
+# Локальная переменная отвечающая за текущую дату в названии бакета
+locals {
+    current_timestamp = timestamp()
+    formatted_date = formatdate("DD-MM-YYYY", local.current_timestamp)
+    bucket_name = "state-storage-${local.formatted_date}"
+}
+
+# Создание объекта в существующей папке
+resource "yandex_storage_object" "backend" {
+  access_key = yandex_iam_service_account_static_access_key.terraform_service_account_key.access_key
+  secret_key = yandex_iam_service_account_static_access_key.terraform_service_account_key.secret_key
+  bucket = local.bucket_name
+  key    = "terraform.tfstate"
+  source = "./terraform.tfstate"
+  depends_on = [yandex_storage_bucket.state_storage]
+}
+```
+
+---
+### 1.3. Создадим VPC с подсетями в разных зонах доступности.
+
+```hcl
+#Создание пустой VPC
+resource "yandex_vpc_network" "vpc0" {
+  name = var.vpc_name
+}
+
+#Создадим в VPC subnet c названием subnet-a
+resource "yandex_vpc_subnet" "subnet-a" {
+  name           = var.subnet-a
+  zone           = var.zone-a
+  network_id     = yandex_vpc_network.vpc0.id
+  v4_cidr_blocks = var.cidr-a
+}
+
+#Создание в VPC subnet с названием subnet-b
+resource "yandex_vpc_subnet" "subnet-b" {
+  name           = var.subnet-b
+  zone           = var.zone-b
+  network_id     = yandex_vpc_network.vpc0.id
+  v4_cidr_blocks = var.cidr-b
+}
+
+#Создание в VPC subnet с названием subnet-d
+resource "yandex_vpc_subnet" "subnet-d" {
+  name           = var.subnet-d
+  zone           = var.zone-d
+  network_id     = yandex_vpc_network.vpc0.id
+  v4_cidr_blocks = var.cidr-d
+}
+
+
+
+variable "vpc_name" {
+  type        = string
+  default     = "vpc0"
+  description = "VPC network"
+}
+
+variable "subnet-a" {
+  type        = string
+  default     = "subnet-a"
+  description = "subnet name"
+}
+
+variable "subnet-b" {
+  type        = string
+  default     = "subnet-b"
+  description = "subnet name"
+}
+
+variable "subnet-d" {
+  type        = string
+  default     = "subnet-d"
+  description = "subnet name"
+}
+
+variable "zone-a" {
+  type        = string
+  default     = "ru-central1-a"
+  description = "https://cloud.yandex.ru/docs/overview/concepts/geo-scope"
+}
+
+variable "zone-b" {
+  type        = string
+  default     = "ru-central1-b"
+  description = "https://cloud.yandex.ru/docs/overview/concepts/geo-scope"
+}
+
+variable "zone-d" {
+  type        = string
+  default     = "ru-central1-d"
+  description = "https://cloud.yandex.ru/docs/overview/concepts/geo-scope"
+}
+
+variable "cidr-a" {
+  type        = list(string)
+  default     = ["10.0.1.0/24"]
+  description = "https://cloud.yandex.ru/docs/vpc/operations/subnet-create"
+}
+
+variable "cidr-b" {
+  type        = list(string)
+  default     = ["10.0.2.0/24"]
+  description = "https://cloud.yandex.ru/docs/vpc/operations/subnet-create"
+}
+
+variable "cidr-d" {
+  type        = list(string)
+  default     = ["10.0.3.0/24"]
+  description = "https://cloud.yandex.ru/docs/vpc/operations/subnet-create"
+}
+```
+
+### 1.4. Убедимся, что теперь выполняется команды `terraform apply` без дополнительных ручных действий.
+<details>
+	<summary></summary>
+      <br>
+
+barsukov@barsukov:~/devops-diplom-yandexcloud-1/1_TASK/config/terraform$ terraform apply
+
+Terraform used the selected providers to generate the following execution plan. Resource actions are indicated with the following symbols:
+  + create
+
+Terraform will perform the following actions:
+
+  # yandex_iam_service_account.service will be created
+  + resource "yandex_iam_service_account" "service" {
+      + created_at         = (known after apply)
+      + description        = "service account to manage VMs"
+      + folder_id          = "b1g6id4gd3l1ivm8l812"
+      + id                 = (known after apply)
+      + labels             = (known after apply)
+      + name               = "barsukov-nv"
+      + service_account_id = (known after apply)
+    }
+
+  # yandex_iam_service_account_static_access_key.terraform_service_account_key will be created
+  + resource "yandex_iam_service_account_static_access_key" "terraform_service_account_key" {
+      + access_key                   = (known after apply)
+      + created_at                   = (known after apply)
+      + description                  = "static access key for object storage"
+      + encrypted_secret_key         = (known after apply)
+      + id                           = (known after apply)
+      + key_fingerprint              = (known after apply)
+      + output_to_lockbox_version_id = (known after apply)
+      + secret_key                   = (sensitive value)
+      + service_account_id           = (known after apply)
+    }
+
+  # yandex_resourcemanager_folder_iam_member.editor will be created
+  + resource "yandex_resourcemanager_folder_iam_member" "editor" {
+      + folder_id = "b1g6id4gd3l1ivm8l812"
+      + member    = (known after apply)
+      + role      = "editor"
+    }
+
+  # yandex_storage_bucket.state_storage will be created
+  + resource "yandex_storage_bucket" "state_storage" {
+      + access_key            = (known after apply)
+      + acl                   = (known after apply)
+      + bucket                = (known after apply)
+      + bucket_domain_name    = (known after apply)
+      + default_storage_class = (known after apply)
+      + folder_id             = (known after apply)
+      + force_destroy         = false
+      + id                    = (known after apply)
+      + policy                = (known after apply)
+      + secret_key            = (sensitive value)
+      + website_domain        = (known after apply)
+      + website_endpoint      = (known after apply)
+
+      + anonymous_access_flags {
+          + list = false
+          + read = false
+        }
+
+      + grant (known after apply)
+
+      + versioning (known after apply)
+    }
+
+  # yandex_storage_object.backend will be created
+  + resource "yandex_storage_object" "backend" {
+      + access_key   = (known after apply)
+      + acl          = "private"
+      + bucket       = (known after apply)
+      + content_type = (known after apply)
+      + id           = (known after apply)
+      + key          = "terraform.tfstate"
+      + secret_key   = (sensitive value)
+      + source       = "./terraform.tfstate"
+    }
+
+  # yandex_vpc_network.vpc0 will be created
+  + resource "yandex_vpc_network" "vpc0" {
+      + created_at                = (known after apply)
+      + default_security_group_id = (known after apply)
+      + folder_id                 = (known after apply)
+      + id                        = (known after apply)
+      + labels                    = (known after apply)
+      + name                      = "vpc0"
+      + subnet_ids                = (known after apply)
+    }
+
+  # yandex_vpc_subnet.subnet-a will be created
+  + resource "yandex_vpc_subnet" "subnet-a" {
+      + created_at     = (known after apply)
+      + folder_id      = (known after apply)
+      + id             = (known after apply)
+      + labels         = (known after apply)
+      + name           = "subnet-a"
+      + network_id     = (known after apply)
+      + v4_cidr_blocks = [
+          + "10.0.1.0/24",
+        ]
+      + v6_cidr_blocks = (known after apply)
+      + zone           = "ru-central1-a"
+    }
+
+  # yandex_vpc_subnet.subnet-b will be created
+  + resource "yandex_vpc_subnet" "subnet-b" {
+      + created_at     = (known after apply)
+      + folder_id      = (known after apply)
+      + id             = (known after apply)
+      + labels         = (known after apply)
+      + name           = "subnet-b"
+      + network_id     = (known after apply)
+      + v4_cidr_blocks = [
+          + "10.0.2.0/24",
+        ]
+      + v6_cidr_blocks = (known after apply)
+      + zone           = "ru-central1-b"
+    }
+
+  # yandex_vpc_subnet.subnet-d will be created
+  + resource "yandex_vpc_subnet" "subnet-d" {
+      + created_at     = (known after apply)
+      + folder_id      = (known after apply)
+      + id             = (known after apply)
+      + labels         = (known after apply)
+      + name           = "subnet-d"
+      + network_id     = (known after apply)
+      + v4_cidr_blocks = [
+          + "10.0.3.0/24",
+        ]
+      + v6_cidr_blocks = (known after apply)
+      + zone           = "ru-central1-d"
+    }
+
+Plan: 9 to add, 0 to change, 0 to destroy.
+
+Do you want to perform these actions?
+  Terraform will perform the actions described above.
+  Only 'yes' will be accepted to approve.
+
+  Enter a value: yes
+
+yandex_vpc_network.vpc0: Creating...
+yandex_iam_service_account.service: Creating...
+yandex_vpc_network.vpc0: Creation complete after 2s [id=enp1r8ukdlbsp80490jt]
+yandex_vpc_subnet.subnet-d: Creating...
+yandex_vpc_subnet.subnet-b: Creating...
+yandex_vpc_subnet.subnet-a: Creating...
+yandex_vpc_subnet.subnet-a: Creation complete after 1s [id=e9bdroop67ob3rto4t8h]
+yandex_vpc_subnet.subnet-b: Creation complete after 1s [id=e2li72gjgdpkrpko19vj]
+yandex_vpc_subnet.subnet-d: Creation complete after 2s [id=fl8a122ciavq89ivhslh]
+yandex_iam_service_account.service: Creation complete after 4s [id=ajegjb3i5mp00khb6kl5]
+yandex_iam_service_account_static_access_key.terraform_service_account_key: Creating...
+yandex_resourcemanager_folder_iam_member.editor: Creating...
+yandex_iam_service_account_static_access_key.terraform_service_account_key: Creation complete after 1s [id=ajeqoatg890o6epqfirf]
+yandex_storage_bucket.state_storage: Creating...
+yandex_resourcemanager_folder_iam_member.editor: Creation complete after 2s
+yandex_storage_bucket.state_storage: Creation complete after 9s [id=state-storage-29-01-2026]
+yandex_storage_object.backend: Creating...
+yandex_storage_object.backend: Creation complete after 1s [id=terraform.tfstate]
+
+Apply complete! Resources: 9 added, 0 changed, 0 destroyed.
+
+</details>
+
+
+
+Проверим созданные ресурсы с помощью CLI
+
+
+```bash
+
+barsukov@barsukov:~/devops-diplom-yandexcloud-1/1_TASK/config/terraform$ yc vpc network list
++----------------------+------+
+|          ID          | NAME |
++----------------------+------+
+| enp1r8ukdlbsp80490jt | vpc0 |
++----------------------+------+
+
+barsukov@barsukov:~/devops-diplom-yandexcloud-1/1_TASK/config/terraform$ yc vpc subnet list
++----------------------+----------+----------------------+----------------+---------------+---------------+
+|          ID          |   NAME   |      NETWORK ID      | ROUTE TABLE ID |     ZONE      |     RANGE     |
++----------------------+----------+----------------------+----------------+---------------+---------------+
+| e2li72gjgdpkrpko19vj | subnet-b | enp1r8ukdlbsp80490jt |                | ru-central1-b | [10.0.2.0/24] |
+| e9bdroop67ob3rto4t8h | subnet-a | enp1r8ukdlbsp80490jt |                | ru-central1-a | [10.0.1.0/24] |
+| fl8a122ciavq89ivhslh | subnet-d | enp1r8ukdlbsp80490jt |                | ru-central1-d | [10.0.3.0/24] |
++----------------------+----------+----------------------+----------------+---------------+---------------+
+
+barsukov@barsukov:~/devops-diplom-yandexcloud-1/1_TASK/config/terraform$ yc storage bucket list
++--------------------------+----------------------+----------+-----------------------+---------------------+
+|           NAME           |      FOLDER ID       | MAX SIZE | DEFAULT STORAGE CLASS |     CREATED AT      |
++--------------------------+----------------------+----------+-----------------------+---------------------+
+| state-storage-29-01-2026 | b1g6id4gd3l1ivm8l812 |        0 | STANDARD              | 2026-01-29 06:17:47 |
++--------------------------+----------------------+----------+-----------------------+---------------------+
+
+barsukov@barsukov:~/devops-diplom-yandexcloud-1/1_TASK/config/terraform$ yc storage bucket stats --name state-storage-29-01-2026
+WARNING: Cannot connect to YC tool initialization service. Network connectivity to the service is required for cli version control. In case you are using yc in an isolated environment, you may turn off this warning by setting env YC_CLI_INITIALIZATION_SILENCE=true
+
+name: state-storage-29-01-2026
+used_size: "9123"
+storage_class_used_sizes:
+  - storage_class: STANDARD
+    class_size: "9123"
+storage_class_counters:
+  - storage_class: STANDARD
+    counters:
+      simple_object_size: "9123"
+      simple_object_count: "1"
+default_storage_class: STANDARD
+anonymous_access_flags:
+  read: false
+  list: false
+  config_read: false
+created_at: "2026-01-29T06:17:47.278368Z"
+updated_at: "2026-01-29T06:26:05.155022Z"
+
+```
+
+### 1.5. Убедимся, что теперь выполняется команды `terraform destroy` без дополнительных ручных действий.
+
+<details>
+	<summary></summary>
+      <br>
+
+barsukov@barsukov:~/devops-diplom-yandexcloud-1/1_TASK/config/terraform$ terraform destroy
+var.cloud_id
+  https://cloud.yandex.ru/docs/resource-manager/operations/cloud/get-id
+
+  Enter a value: b1gi0o9ad7g6hm1qke89
+
+var.folder_id
+  https://cloud.yandex.ru/docs/resource-manager/operations/folder/get-id
+
+  Enter a value: b1g6id4gd3l1ivm8l812
+
+var.token
+  OAuth-token; https://cloud.yandex.ru/docs/iam/concepts/authorization/oauth-token
+
+  Enter a value: y0__xDo8-1bGMHdEyCVno70E17kTXLZmNs8LY6N-l94Jjt_nP5v
+
+yandex_vpc_network.vpc0: Refreshing state... [id=enp1r8ukdlbsp80490jt]
+yandex_iam_service_account.service: Refreshing state... [id=ajegjb3i5mp00khb6kl5]
+yandex_resourcemanager_folder_iam_member.editor: Refreshing state...
+yandex_iam_service_account_static_access_key.terraform_service_account_key: Refreshing state... [id=ajeqoatg890o6epqfirf]
+yandex_storage_bucket.state_storage: Refreshing state... [id=state-storage-29-01-2026]
+yandex_vpc_subnet.subnet-d: Refreshing state... [id=fl8a122ciavq89ivhslh]
+yandex_vpc_subnet.subnet-a: Refreshing state... [id=e9bdroop67ob3rto4t8h]
+yandex_vpc_subnet.subnet-b: Refreshing state... [id=e2li72gjgdpkrpko19vj]
+yandex_storage_object.backend: Refreshing state... [id=terraform.tfstate]
+
+Terraform used the selected providers to generate the following execution plan. Resource actions are indicated with the following symbols:
+  - destroy
+
+Terraform will perform the following actions:
+
+  # yandex_iam_service_account.service will be destroyed
+  - resource "yandex_iam_service_account" "service" {
+      - created_at         = "2026-01-29T06:17:43Z" -> null
+      - description        = "service account to manage VMs" -> null
+      - folder_id          = "b1g6id4gd3l1ivm8l812" -> null
+      - id                 = "ajegjb3i5mp00khb6kl5" -> null
+      - name               = "barsukov-nv" -> null
+      - service_account_id = "ajegjb3i5mp00khb6kl5" -> null
+    }
+
+  # yandex_iam_service_account_static_access_key.terraform_service_account_key will be destroyed
+  - resource "yandex_iam_service_account_static_access_key" "terraform_service_account_key" {
+      - access_key         = "YCAJEDoAsYi8WZ4GZNkLfb3wP" -> null
+      - created_at         = "2026-01-29T06:17:45Z" -> null
+      - description        = "static access key for object storage" -> null
+      - id                 = "ajeqoatg890o6epqfirf" -> null
+      - secret_key         = (sensitive value) -> null
+      - service_account_id = "ajegjb3i5mp00khb6kl5" -> null
+    }
+
+  # yandex_resourcemanager_folder_iam_member.editor will be destroyed
+  - resource "yandex_resourcemanager_folder_iam_member" "editor" {
+      - folder_id = "b1g6id4gd3l1ivm8l812" -> null
+      - member    = "serviceAccount:ajegjb3i5mp00khb6kl5" -> null
+      - role      = "editor" -> null
+    }
+
+  # yandex_storage_bucket.state_storage will be destroyed
+  - resource "yandex_storage_bucket" "state_storage" {
+      - access_key              = "YCAJEDoAsYi8WZ4GZNkLfb3wP" -> null
+      - bucket                  = "state-storage-29-01-2026" -> null
+      - bucket_domain_name      = "state-storage-29-01-2026.storage.yandexcloud.net" -> null
+      - default_storage_class   = "STANDARD" -> null
+      - disabled_statickey_auth = false -> null
+      - folder_id               = "b1g6id4gd3l1ivm8l812" -> null
+      - force_destroy           = false -> null
+      - id                      = "state-storage-29-01-2026" -> null
+      - max_size                = 0 -> null
+      - secret_key              = (sensitive value) -> null
+      - tags                    = {} -> null
+        # (1 unchanged attribute hidden)
+
+      - anonymous_access_flags {
+          - config_read = false -> null
+          - list        = false -> null
+          - read        = false -> null
+        }
+
+      - versioning {
+          - enabled = false -> null
+        }
+    }
+
+  # yandex_storage_object.backend will be destroyed
+  - resource "yandex_storage_object" "backend" {
+      - access_key   = "YCAJEDoAsYi8WZ4GZNkLfb3wP" -> null
+      - acl          = "private" -> null
+      - bucket       = "state-storage-29-01-2026" -> null
+      - content_type = "application/octet-stream" -> null
+      - id           = "terraform.tfstate" -> null
+      - key          = "terraform.tfstate" -> null
+      - secret_key   = (sensitive value) -> null
+      - source       = "./terraform.tfstate" -> null
+      - tags         = {} -> null
+    }
+
+  # yandex_vpc_network.vpc0 will be destroyed
+  - resource "yandex_vpc_network" "vpc0" {
+      - created_at                = "2026-01-29T06:17:42Z" -> null
+      - default_security_group_id = "enpbfldm4c0p9rt1psa8" -> null
+      - folder_id                 = "b1g6id4gd3l1ivm8l812" -> null
+      - id                        = "enp1r8ukdlbsp80490jt" -> null
+      - labels                    = {} -> null
+      - name                      = "vpc0" -> null
+      - subnet_ids                = [
+          - "e2li72gjgdpkrpko19vj",
+          - "e9bdroop67ob3rto4t8h",
+          - "fl8a122ciavq89ivhslh",
+        ] -> null
+        # (1 unchanged attribute hidden)
+    }
+
+  # yandex_vpc_subnet.subnet-a will be destroyed
+  - resource "yandex_vpc_subnet" "subnet-a" {
+      - created_at     = "2026-01-29T06:17:44Z" -> null
+      - folder_id      = "b1g6id4gd3l1ivm8l812" -> null
+      - id             = "e9bdroop67ob3rto4t8h" -> null
+      - labels         = {} -> null
+      - name           = "subnet-a" -> null
+      - network_id     = "enp1r8ukdlbsp80490jt" -> null
+      - v4_cidr_blocks = [
+          - "10.0.1.0/24",
+        ] -> null
+      - v6_cidr_blocks = [] -> null
+      - zone           = "ru-central1-a" -> null
+        # (2 unchanged attributes hidden)
+    }
+
+  # yandex_vpc_subnet.subnet-b will be destroyed
+  - resource "yandex_vpc_subnet" "subnet-b" {
+      - created_at     = "2026-01-29T06:17:44Z" -> null
+      - folder_id      = "b1g6id4gd3l1ivm8l812" -> null
+      - id             = "e2li72gjgdpkrpko19vj" -> null
+      - labels         = {} -> null
+      - name           = "subnet-b" -> null
+      - network_id     = "enp1r8ukdlbsp80490jt" -> null
+      - v4_cidr_blocks = [
+          - "10.0.2.0/24",
+        ] -> null
+      - v6_cidr_blocks = [] -> null
+      - zone           = "ru-central1-b" -> null
+        # (2 unchanged attributes hidden)
+    }
+
+  # yandex_vpc_subnet.subnet-d will be destroyed
+  - resource "yandex_vpc_subnet" "subnet-d" {
+      - created_at     = "2026-01-29T06:17:45Z" -> null
+      - folder_id      = "b1g6id4gd3l1ivm8l812" -> null
+      - id             = "fl8a122ciavq89ivhslh" -> null
+      - labels         = {} -> null
+      - name           = "subnet-d" -> null
+      - network_id     = "enp1r8ukdlbsp80490jt" -> null
+      - v4_cidr_blocks = [
+          - "10.0.3.0/24",
+        ] -> null
+      - v6_cidr_blocks = [] -> null
+      - zone           = "ru-central1-d" -> null
+        # (2 unchanged attributes hidden)
+    }
+
+Plan: 0 to add, 0 to change, 9 to destroy.
+
+Do you really want to destroy all resources?
+  Terraform will destroy all your managed infrastructure, as shown above.
+  There is no undo. Only 'yes' will be accepted to confirm.
+
+  Enter a value: yes
+
+yandex_vpc_subnet.subnet-a: Destroying... [id=e9bdroop67ob3rto4t8h]
+yandex_vpc_subnet.subnet-b: Destroying... [id=e2li72gjgdpkrpko19vj]
+yandex_vpc_subnet.subnet-d: Destroying... [id=fl8a122ciavq89ivhslh]
+yandex_resourcemanager_folder_iam_member.editor: Destroying...
+yandex_storage_object.backend: Destroying... [id=terraform.tfstate]
+yandex_storage_object.backend: Destruction complete after 0s
+yandex_storage_bucket.state_storage: Destroying... [id=state-storage-29-01-2026]
+yandex_vpc_subnet.subnet-b: Destruction complete after 0s
+yandex_vpc_subnet.subnet-d: Destruction complete after 1s
+yandex_vpc_subnet.subnet-a: Destruction complete after 1s
+yandex_vpc_network.vpc0: Destroying... [id=enp1r8ukdlbsp80490jt]
+yandex_vpc_network.vpc0: Destruction complete after 0s
+yandex_resourcemanager_folder_iam_member.editor: Destruction complete after 6s
+yandex_storage_bucket.state_storage: Still destroying... [id=state-storage-29-01-2026, 00m10s elapsed]
+yandex_storage_bucket.state_storage: Destruction complete after 11s
+yandex_iam_service_account_static_access_key.terraform_service_account_key: Destroying... [id=ajeqoatg890o6epqfirf]
+yandex_iam_service_account_static_access_key.terraform_service_account_key: Destruction complete after 0s
+yandex_iam_service_account.service: Destroying... [id=ajegjb3i5mp00khb6kl5]
+yandex_iam_service_account.service: Destruction complete after 9s
+╷
+│ Warning: No bindings found for role
+│ 
+│ No bindings found for role: editor. Resource will be removed from state
+╵
+
+Destroy complete! Resources: 9 destroyed.
+barsukov@barsukov:~/devops-diplom-yandexcloud-1/1_TASK/config/terraform$
+
+```
+
 
 ---
 ### Создание Kubernetes кластера
