@@ -1470,10 +1470,10 @@ Hey, Netology
 </html>
 barsukov@barsukov:~/Test-application-1$ 
 ```
+
 Git репозиторий с тестовым приложением и Dockerfile [GITHub](https://github.com/Barsukov-Alex/Test-application-1.git)
+
 Загрузим созданный образ в реестре [Docker Hub](https://hub.docker.com/repository/docker/mozdoksity/nginx/general):
-
-
 ```bash
 barsukov@barsukov:~/Test-application-1$ sudo docker push mozdoksity/nginx:v1
 The push refers to repository [docker.io/mozdoksity/nginx]
@@ -1489,9 +1489,6 @@ d71eae0084c1: Mounted from library/nginx
 v1: digest: sha256:b2431c5fa044cbb7b01bbeccf377656871af2dd30633e39eef273e62a28611ca size: 2196
 barsukov@barsukov:~/Test-application-1$ 
 ```
-
-
-
 ---
 
 
