@@ -221,6 +221,7 @@ variable "cidr-d" {
 	<summary></summary>
       <br>
 
+```bash
 barsukov@barsukov:~/devops-diplom-yandexcloud-1/1_TASK/config/terraform$ terraform apply
 
 Terraform used the selected providers to generate the following execution plan. Resource actions are indicated with the following symbols:
@@ -380,6 +381,7 @@ yandex_storage_object.backend: Creating...
 yandex_storage_object.backend: Creation complete after 1s [id=terraform.tfstate]
 
 Apply complete! Resources: 9 added, 0 changed, 0 destroyed.
+```
 
 </details>
 
@@ -441,7 +443,7 @@ updated_at: "2026-01-29T06:26:05.155022Z"
 <details>
 	<summary></summary>
       <br>
-
+```bash
 barsukov@barsukov:~/devops-diplom-yandexcloud-1/1_TASK/config/terraform$ terraform destroy
 var.cloud_id
   https://cloud.yandex.ru/docs/resource-manager/operations/cloud/get-id
