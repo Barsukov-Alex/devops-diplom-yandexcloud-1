@@ -443,6 +443,7 @@ updated_at: "2026-01-29T06:26:05.155022Z"
 <details>
 	<summary></summary>
       <br>
+
 ```bash
 barsukov@barsukov:~/devops-diplom-yandexcloud-1/1_TASK/config/terraform$ terraform destroy
 var.cloud_id
