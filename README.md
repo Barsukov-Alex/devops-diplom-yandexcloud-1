@@ -631,7 +631,10 @@ barsukov@barsukov:~/devops-diplom-yandexcloud-1/1_TASK/config/terraform$
 ```
 <details>
 
+
 ---
+
+
 ### Создание Kubernetes кластера
 <details>
 	<summary></summary>
