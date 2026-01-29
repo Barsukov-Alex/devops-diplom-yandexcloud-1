@@ -1774,6 +1774,10 @@ http://158.160.123.207:30000
 ---
 ### Установка и настройка CI/CD
 
+<details>
+	<summary></summary>
+      <br>
+
 Осталось настроить ci/cd систему для автоматической сборки docker image и деплоя приложения при изменении кода.
 
 Цель:
@@ -1800,3 +1804,158 @@ http://158.160.123.207:30000
 6. Ссылка на тестовое приложение и веб интерфейс Grafana с данными доступа.
 7. Все репозитории рекомендуется хранить на одном ресурсе (github, gitlab)
 
+
+</details>
+
+
+### Решение
+
+
+Настроим ci/cd систему для автоматической сборки docker image и деплоя приложения при изменении кода.
+
+
+Для автоматической сборки и docker-образа при коммите в репозиторий с тестовым приложением воспользуемся платформой CI/CD GitHub Actions.
+
+Создадим в DockerHub секретный токен `my token`.
+<img src = "img/task5_1.jpg" width = 100%>
+
+
+Добавим токен в `Settings -> Secrets and variables -> Actions secrets and variables` в переменную `MY_TOKEN_DOCKER_HUB`.  
+В переменную `USER_DOCKER_HUB` добавим имя пользователя от Docker Hub `mozdoksity`.  
+<img src = "img/task5_2.jpg" width = 100%>
+
+
+Далее, создадим `workflow` файл для автоматической сборки приложения nginx:  
+Перейдем на вкладку `Actions`, выполним `New workflow`, затем `Simple workflow` (Config). Создадим файл `../.github/workflows/actions-build.yml`.
+
+actions-build.yml
+
+```yml
+name: Сборка Docker-образа
+
+on:
+  push:
+    branches:
+      - '*'
+jobs:
+  my_build_job:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Проверка кода
+        uses: actions/checkout@v4
+
+      - name: Вход на Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.USER_DOCKER_HUB }}
+          password: ${{ secrets.MY_TOKEN_DOCKER_HUB }}
+
+      - name: Сборка Docker-образа
+        run: |
+          docker build . --file Dockerfile --tag nginx:latest
+          docker tag nginx:latest ${{ secrets.USER_DOCKER_HUB }}/nginx:latest
+
+      - name: Push Docker-образа в Docker Hub
+        run: |
+          docker push ${{ secrets.USER_DOCKER_HUB }}/nginx:latest
+```
+
+Выполним commit.
+
+Перейдем в раздел **Actions**, где видим, что `Workflow file` успешно выполнился.
+<img src = "img/task5_3.jpg" width = 100%>
+
+
+В результате в Docker Hub отображается загруженный образ.:
+<img src = "img/task5_4.jpg" width = 100%>
+
+---
+
+
+## 5.2 Автоматический деплой нового docker образа.
+
+В переменную `KUBECONFIG` добавим данные с сертификатами для доступа к кластеру из конфигурационного файла `~/.kube/config` изменив при это серый ip-адрес master-node на белый.
+
+Cоздадим `workflow` файл для автоматической сборки приложения nginx при создании тега, а также его автоматического развертывания в кластер Kubernetes.
+
+actions-build-deployment.yml
+```bash
+name: Сборка и Развертывание
+on:
+  push:
+    branches:
+      - '*'
+  create:
+    tags:
+      - '*'
+
+env:
+  IMAGE_TAG: mozdoksity/nginx
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Проверка кода
+        uses: actions/checkout@v4
+
+      - name: Установка Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Вход на Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.USER_DOCKER_HUB }}
+          password: ${{ secrets.MY_TOKEN_DOCKER_HUB }}
+
+      - name: Определяем версию
+        run: |
+          echo "GITHUB_REF: ${GITHUB_REF}"
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+          else
+            VERSION=$(git log -1 --pretty=format:%B | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' || echo "")
+          fi
+          if [[ -z "$VERSION" ]]; then
+            echo "No version found in the commit message or tag"
+            exit 1
+          fi
+          VERSION=${VERSION//[[:space:]]/}  # Remove any spaces
+          echo "Using version: $VERSION"
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+
+      - name: Сборка и push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ env.IMAGE_TAG }}:${{ env.VERSION }}
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Проверка кода
+        uses: actions/checkout@v4
+
+      - name: Установка kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/v1.30.3/bin/linux/amd64/kubectl"
+          chmod +x ./kubectl
+          sudo mv ./kubectl /usr/local/bin/kubectl
+          kubectl version --client
+
+      - name: Конфигурирование kubectl, развертыввание и деплой
+        run: |
+          echo "${{ secrets.KUBECONFIG }}" > config.yml
+          export KUBECONFIG=config.yml
+          kubectl config view
+          kubectl get nodes
+          kubectl get pods --all-namespaces
+          kubectl create deployment nginx --image=mozdoksity/nginx:1.0.0
+          kubectl rollout status deployment.v1.apps/nginx
+    env:
+      KUBECONFIG: ${{ secrets.KUBECONFIG }}
+```
