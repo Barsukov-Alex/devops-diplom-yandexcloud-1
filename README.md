@@ -439,9 +439,7 @@ updated_at: "2026-01-29T06:26:05.155022Z"
 ```
 
 ### 1.5. Убедимся, что теперь выполняется команды `terraform destroy` без дополнительных ручных действий.
-<details>
-	<summary></summary>
-      <br>
+
 ```bash
 barsukov@barsukov:~/devops-diplom-yandexcloud-1/1_TASK/config/terraform$ terraform destroy
 
