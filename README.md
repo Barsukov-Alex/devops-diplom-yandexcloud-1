@@ -1470,7 +1470,7 @@ Hey, Netology
 </html>
 barsukov@barsukov:~/Test-application-1$ 
 ```
-
+Git репозиторий с тестовым приложением и Dockerfile [GITHub](https://github.com/Barsukov-Alex/Test-application-1.git)
 Загрузим созданный образ в реестре [Docker Hub](https://hub.docker.com/repository/docker/mozdoksity/nginx/general):
 
 
