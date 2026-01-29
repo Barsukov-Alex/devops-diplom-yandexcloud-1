@@ -439,8 +439,7 @@ updated_at: "2026-01-29T06:26:05.155022Z"
 ```
 
 ### 1.5. Убедимся, что теперь выполняется команды `terraform destroy` без дополнительных ручных действий.
-
-</details>
+<details>
 	<summary></summary>
       <br>
 ```bash
@@ -627,8 +626,6 @@ yandex_iam_service_account.service: Destruction complete after 9s
 Destroy complete! Resources: 9 destroyed.
 barsukov@barsukov:~/devops-diplom-yandexcloud-1/1_TASK/config/terraform$
 ```
-</details>
-
 
 ---
 
