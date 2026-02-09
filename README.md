@@ -444,7 +444,6 @@ updated_at: "2026-01-29T06:26:05.155022Z"
 <details>
 	<summary></summary>
       <br>
-```bash
 barsukov@barsukov:~/devops-diplom-yandexcloud-1/1_TASK/config/terraform$ terraform destroy
 
 yandex_vpc_network.vpc0: Refreshing state... [id=enp1r8ukdlbsp80490jt]
@@ -627,8 +626,6 @@ yandex_iam_service_account.service: Destruction complete after 9s
 
 Destroy complete! Resources: 9 destroyed.
 barsukov@barsukov:~/devops-diplom-yandexcloud-1/1_TASK/config/terraform$
-```
-
 </details>
 
 
